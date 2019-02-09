@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from pyblique import error_rate, get_data, ObliqueClassifier
-from sklearn.cross_validation import KFold
+import sklearn
 import argparse
 import os
 import sys
@@ -24,7 +24,12 @@ def run(fname, folds):
     with open("Results/{}_{}folds.txt".format(fname, folds), "a") as f:
         tee = Tee(sys.stdout, f)
         tee("Validating classifier with {}-fold test...".format(folds))
-        kf = KFold(len(data), n_folds=folds)
+        if "cross_validation" in sklearn.__all__:
+            from sklearn.cross_validation import KFold
+            kf = KFold(len(data), n_folds=folds)
+        else:
+            from sklearn.model_selection import KFold
+            kf = KFold(n_splits=folds).split(data)
         avg_error = 0
         it = 1
         for train, test in kf:
