@@ -24,15 +24,26 @@ class ObliqueClassifier:
     Currently, the classifier only uses the gini index as a metric.
     """
 
-    def __init__(self, metric=impurity.gini, data=None):
+    def __init__(self, metric=impurity.gini, data=None, num_perturb=10, pr_perturb_equal=0.3, min_samples_split=2):
         """Metric can only be a minimizing function!
         """
+        self.num_perturb = num_perturb
+        self.min_samples_split = min_samples_split
+        self.pr_perturb_equal = pr_perturb_equal
+        self.num_classes = 0
+        # optional add:
+        #   other stopping criteria like max_depth, min_samples_leaf, min_impurity_decrease, min_impurity_split
         if data:
-            self.train(data)
+            self.fit(data)
         self.metric = metric
         self.tree = {}
 
     def fit(self, data):
+        """
+        :param data: float numpy array with dimensions (number of samples), (number of attributes +1)
+            data[:, -1] are considered as labels from the set {1., 2., 3., ..., max(data[:, -1])}
+        """
+        self.num_classes = max(data[:, -1])
         self.tree = self.__create_decision_tree(data)
 
     def predict(self, record):
@@ -61,18 +72,32 @@ class ObliqueClassifier:
             sv[-1] = -split[0]
             sv[index] = 1
             low, high = self.__split_data(data, sv)
-            imp = self.metric(low, -1) + self.metric(high, -1)
+            imp = self.metric(low[:, -1]) + self.metric(high[:, -1])
             # perturb a random attribute in split vector 20 times
-            for c in range(10):
+            for c in range(self.num_perturb):
                 r = randint(0, len(sv) - 1)
                 imp, sv = self.__perturb(data, sv, r, imp)
             tree = {"split": sv}
             low, high = self.__split_data(data, sv)
-            subtree_low = self.__create_decision_tree(low)
+            if len(low) > self.min_samples_split and len(high) > self.min_samples_split:
+                # stop splitting when one of the subtrees has less than {min_samples_split} samples
+                subtree_low = self.__create_decision_tree(low)
+                subtree_high = self.__create_decision_tree(high)
+            else:
+                values, counts = np.unique(data[:, -1], return_counts=True)
+                return values[np.argmax(counts)]
             tree["low"] = subtree_low
-            subtree_high = self.__create_decision_tree(high)
             tree["high"] = subtree_high
+            tree["class_hits_low"] = self.__get_hits(low[:, -1])
+            tree["class_hits_high"] = self.__get_hits(high[:, -1])
         return tree
+
+    def __get_hits(self, labels):
+        values, counts = np.unique(labels, return_counts=True)
+        out = np.zeros(self.num_classes)
+        for i, label in enumerate(values):
+            out[int(label)-1] = counts[i]
+        return out
 
     def __get_splits(self, data, attr):
         attr_vals = np.sort(data[:, attr])
@@ -98,13 +123,13 @@ class ObliqueClassifier:
             newsplitv = np.array(splitv)
             newsplitv[attr] = s
             low, high = self.__split_data(data, newsplitv)
-            imp = self.metric(low, -1) + self.metric(high, -1)
+            imp = self.metric(low[:, -1]) + self.metric(high[:, -1])
             amvalues[s] = (imp, newsplitv)
         bestnewimp, bestnewsplit = min(amvalues.values(), key=lambda x: x[0])
         if bestnewimp > old_imp:
             return bestnewimp, bestnewsplit
         elif bestnewimp == old_imp:
-            if random() < 0.3:
+            if random() < self.pr_perturb_equal:
                 return bestnewimp, bestnewsplit
         return old_imp, splitv
 
@@ -115,7 +140,7 @@ class ObliqueClassifier:
         for s in split_values:
             cond = data[:, attr] <= s
             left, right = data[cond], data[~cond]
-            split_evals[s] = self.metric(left, -1) + self.metric(right, -1)
+            split_evals[s] = self.metric(left[:, -1]) + self.metric(right[:, -1])
         # Minimize because we're using gini index
         return min(split_evals.items(), key=lambda x: x[1])
 

@@ -1,24 +1,27 @@
 # Module containing impurity metrics.
 
-from collections import Counter
 import numpy as np
 import sys
-import time
 
 
-def frequencies(data, target_attr):
-    if len(data) == 0:
+def prob(data_labels):
+    if len(data_labels) == 0:
         return []
     try:
-        c = Counter(data[:, target_attr])
-        n_records = float(len(data))
-        return np.array([v/n_records for v in c.values()])
+        values, counts = np.unique(data_labels, return_counts=True)
+        return counts/np.sum(counts)
     except TypeError:
         sys.stderr.write("Please use Numpy arrays!")
         sys.exit()
 
 
-def gini(data, target_attr):
-    freq = frequencies(data, target_attr)
+def gini(data_labels):
+    freq = prob(data_labels)
     fs = np.square(freq)
     return 1 - np.sum(fs)
+
+
+def entropy(data_labels):
+    freq = prob(data_labels)
+    return -np.sum(freq*np.log2(freq))
+

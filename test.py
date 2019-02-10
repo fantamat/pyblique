@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from pyblique import error_rate, get_data, ObliqueClassifier
+import impurity
 import sklearn
 import argparse
 import os
@@ -35,7 +36,7 @@ def run(fname, folds):
         for train, test in kf:
             start = time.clock()
             tee("Iteration #{}".format(it))
-            oc = ObliqueClassifier()
+            oc = ObliqueClassifier(metric=impurity.entropy, min_samples_split=2)
             oc.fit(data[train])
             predictions = [oc.predict(r) for r in data[test]]
             actual_labels = data[test][:, -1]
